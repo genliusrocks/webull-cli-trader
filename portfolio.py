@@ -109,3 +109,89 @@ def get_positions():
         )
 
     console.print(table)
+def list_accounts():
+    """
+    Fetches and lists all accounts associated with the user.
+    """
+    api = ConnectionManager.get_trade_api()
+    console.print(f"[dim]Fetching account list...[/dim]")
+
+    data = None
+    response = None
+
+    try:
+        # 策略 1: 尝试 api.account_v2.get_account_list (常见于新版 SDK)
+        # 注意: 这里检查的是 api 根对象下的 account_v2，而不是 api.account
+        if hasattr(api, 'account_v2') and hasattr(api.account_v2, 'get_account_list'):
+            console.print("[dim]Using api.account_v2.get_account_list()...[/dim]")
+            response = api.account_v2.get_account_list()
+            
+        # 策略 2: 尝试 api.account.get_account_list (旧版)
+        elif hasattr(api.account, 'get_account_list'):
+            response = api.account.get_account_list()
+            
+        # 策略 3: 尝试 get_app_subscriptions (有时包含 account_id)
+        elif hasattr(api.account, 'get_app_subscriptions'):
+            console.print("[dim]Method 'get_account_list' missing. Trying 'get_app_subscriptions' to find account...[/dim]")
+            # 传入空字典或 0 作为 page_size/offset
+            response = api.account.get_app_subscriptions({'page_size': 10})
+        
+        else:
+            console.print("[bold red]Error:[/bold red] Could not find any method to list accounts.")
+            console.print(f"Please check dir(api): {dir(api)}")
+            return
+
+        # 检查响应
+        if response and response.status_code != 200:
+            console.print(f"[bold red]Error API Response:[/bold red] {response.text}")
+            return
+        
+        if response:
+            data = response.json()
+        
+    except Exception as e:
+        console.print(f"[bold red]Exception:[/bold red] {e}")
+        return
+
+    if not data:
+        console.print("[yellow]No data returned.[/yellow]")
+        return
+
+    # 解析数据 (兼容 v1/v2/subscriptions 不同结构)
+    accounts = []
+    
+    # 情况 A: 标准 Account List 结构
+    if isinstance(data, list):
+        accounts = data
+    elif 'data' in data and isinstance(data['data'], list):
+        accounts = data['data']
+    elif 'accountList' in data: # 有些版本返回 camelCase
+        accounts = data['accountList']
+    # 情况 B: Subscriptions 结构 (提取 account_id)
+    elif isinstance(data, dict) and 'account_id' in data:
+        accounts = [data] # 单个对象转列表
+    
+    if not accounts:
+        console.print(f"[yellow]Could not parse accounts from:[/yellow] {data}")
+        return
+
+    # 绘制表格
+    table = Table(title="Webull Accounts")
+    table.add_column("Account ID", style="bold cyan")
+    table.add_column("Type/Status", style="yellow")
+    table.add_column("Region")
+
+    for acc in accounts:
+        # 尝试提取各种可能的字段名
+        acc_id = str(acc.get('account_id') or acc.get('accountId') or acc.get('sec_account_id') or 'N/A')
+        
+        # 尝试提取状态/类型
+        acc_type = str(acc.get('account_type_name') or acc.get('account_type') or 'Unknown')
+        status = str(acc.get('status') or acc.get('account_status') or '-')
+        
+        # 尝试提取区域
+        region = str(acc.get('region_name') or acc.get('region_id') or '-')
+
+        table.add_row(acc_id, f"{acc_type} ({status})", region)
+
+    console.print(table)

@@ -5,12 +5,25 @@ import sys
 # Ensure we can import from local modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from portfolio import get_account_summary, get_positions
+from portfolio import get_account_summary, get_positions, list_accounts # <--- 引入 list_accounts
 
 @click.group()
 def cli():
     """Webull CLI Trader - Official Open API."""
     pass
+
+@cli.group()
+def account():
+    """Manage and list trading accounts."""
+    pass
+
+@account.command("list")
+def list_cmd():
+    """
+    List all available accounts.
+    Usage: python main.py account list
+    """
+    list_accounts()
 
 @cli.group()
 def portfolio():
