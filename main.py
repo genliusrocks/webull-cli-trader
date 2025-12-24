@@ -42,15 +42,13 @@ def handle_account_balance():
     try:
         client = get_trade_client()
         
-        # 1. 先获取账户列表
+        # 1. 获取账户列表
         list_res = client.account_v2.get_account_list()
         if list_res.status_code != 200:
             print(f"无法获取账户列表: {list_res.text}")
             return
 
-        # 修正1: 根据你的日志，返回的直接就是列表，不需要 .get('data')
         account_list = list_res.json()
-
         if not account_list:
             print("未找到有效账户。")
             return
@@ -59,15 +57,12 @@ def handle_account_balance():
 
         # 2. 遍历每个账户查询余额
         for acct in account_list:
-            # 修正2: 根据你的日志，Key 是 "account_id"
             account_id = acct.get('account_id')
-            
             if not account_id:
-                print("跳过: 无法在账户信息中找到 account_id")
+                print("跳过: 无法找到 account_id")
                 continue
 
-            account_type = acct.get('account_type', 'Unknown') # 修正 Key 为 account_type
-            
+            account_type = acct.get('account_type', 'Unknown')
             print(f"--- 账户 ID: {account_id} (类型: {account_type}) ---")
             
             # 调用 Balance 接口
@@ -76,26 +71,28 @@ def handle_account_balance():
             if bal_res.status_code == 200:
                 data = bal_res.json()
                 
-                # 打印主要信息 (提取关键字段，避免满屏 JSON)
-                # 注意：不同账户类型返回字段可能略有不同，使用 .get 防止报错
+                # === 调试关键点：打印原始数据 ===
+                # 如果下面打印出来的还是 None，请把这段打印出来的 JSON 发给我
+                print(">>> DEBUG: 服务器返回的原始数据:") 
+                print(json.dumps(data, indent=2))
+                print("-" * 20)
+                # ============================
+
+                # 尝试同时获取驼峰(camelCase)和下划线(snake_case)两种格式
                 summary = {
-                    "净资产 (Net Liquidation)": data.get('netLiquidation'),
-                    "总市值 (Total Market Value)": data.get('totalMarketValue'),
-                    "现金余额 (Cash Balance)": data.get('cashBalance'),
-                    "可用购买力 (Buying Power)": data.get('buyingPower'),
-                    "未实现盈亏 (Unrealized P&L)": data.get('unrealizedProfitLoss'),
+                    "净资产 (Net Liquidation)": data.get('netLiquidation') or data.get('net_liquidation'),
+                    "总市值 (Total Market Value)": data.get('totalMarketValue') or data.get('total_market_value') or data.get('market_value'),
+                    "现金余额 (Cash Balance)": data.get('cashBalance') or data.get('cash_balance') or data.get('total_cash_balance'),
+                    "可用购买力 (Buying Power)": data.get('buyingPower') or data.get('buying_power'),
+                    "未实现盈亏 (Unrealized P&L)": data.get('unrealizedProfitLoss') or data.get('unrealized_profit_loss'),
                     "币种 (Currency)": data.get('currency')
                 }
 
-                # 格式化打印
                 for k, v in summary.items():
                     print(f"{k:<30}: {v}")
-                
-                # 如果你想看完整原始数据，取消下面这行的注释
-                # print(json.dumps(data, indent=4))
-                
             else:
                 print(f"获取余额失败: {bal_res.status_code}")
+                print(bal_res.text)
             
             print("-" * 50 + "\n")
 
