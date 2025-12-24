@@ -20,9 +20,9 @@ def get_account_summary():
 
     console.print(f"[dim]Fetching summary for account: {account_id}...[/dim]")
 
-    # Webull API: Get Account Balance
-    # Note: Currency param might be optional or 'USD' depending on region
-    response = api.account.get_account_balance(account_id)
+    # FIX: Added required argument 'total_asset_currency'
+    # We default to 'USD' for US market accounts.
+    response = api.account.get_account_balance(account_id, total_asset_currency='USD')
 
     if response.status_code != 200:
         console.print(f"[bold red]Error fetching funds:[/bold red] {response.text}")
@@ -36,7 +36,7 @@ def get_account_summary():
     table.add_column("Metric", style="cyan", no_wrap=True)
     table.add_column(f"Value ({currency})", style="green")
 
-    # Extract Fields (Based on Webull Open API V1/V2 specs)
+    # Extract Fields (Based on Webull Open API specs)
     total_asset = safe_float(data.get('total_asset') or data.get('net_liquidation'))
     market_val = safe_float(data.get('total_market_value'))
     cash_balance = safe_float(data.get('total_cash_balance') or data.get('cash_balance'))
@@ -46,8 +46,8 @@ def get_account_summary():
     buying_power = safe_float(data.get('overnight_liquidity') or data.get('day_trade_buying_power'))
 
     table.add_row("Total Assets", f"${total_asset:,.2f}")
-    table.add_row("Market Value", f"${market_val:,.2f}")
     table.add_row("Cash Balance", f"${cash_balance:,.2f}")
+    table.add_row("Market Value", f"${market_val:,.2f}")
     table.add_row("Unrealized P&L", f"${unrealized_pl:,.2f}")
     table.add_row("Buying Power", f"${buying_power:,.2f}")
 
