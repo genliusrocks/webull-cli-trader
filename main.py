@@ -1,60 +1,106 @@
 import argparse
 import json
 import sys
-import os  # 必须导入 os 模块
+import os
 
-# --- 严格按照官方文档的 Import 路径 ---
 from webull.core.client import ApiClient
 from webull.trade.trade_client import TradeClient
 
 # ================= 配置区域 =================
-# 从环境变量读取凭据
 YOUR_APP_KEY = os.getenv("WEBULL_APP_KEY")
 YOUR_APP_SECRET = os.getenv("WEBULL_APP_SECRET")
-
-# Region 配置
 REGION_ID = "us"
-# API 地址 (生产环境: api.webull.com, 测试环境: us-openapi-alb.uat.webullbroker.com)
 API_ENDPOINT = "api.webull.com" 
 # ===========================================
 
 def get_trade_client():
     """初始化并返回 TradeClient"""
-    # 检查环境变量是否已设置
     if not YOUR_APP_KEY or not YOUR_APP_SECRET:
         print("错误: 未找到环境变量 WEBULL_APP_KEY 或 WEBULL_APP_SECRET。", file=sys.stderr)
-        print("请先在终端中设置它们，例如: export WEBULL_APP_KEY='你的Key'", file=sys.stderr)
         sys.exit(1)
 
-    # 1. 初始化基础 API Client
-    # 注意：这里如果 Key 包含非法字符（如中文），SDK 内部发请求时仍会报 latin-1 错误
     api_client = ApiClient(YOUR_APP_KEY, YOUR_APP_SECRET, REGION_ID)
-    
-    # 2. 添加 Endpoint (关键步骤)
     api_client.add_endpoint(REGION_ID, API_ENDPOINT)
-    
-    # 3. 初始化 Trade Client
-    trade_client = TradeClient(api_client)
-    return trade_client
+    return TradeClient(api_client)
 
 def handle_account_list():
     """获取账户列表"""
     try:
         client = get_trade_client()
-        
-        # 调用 V2 接口
         res = client.account_v2.get_account_list()
-        
         if res.status_code == 200:
             print("Successfully retrieved account list:")
             print(json.dumps(res.json(), indent=4))
         else:
             print(f"Failed. Status Code: {res.status_code}")
-            print("Response:", res.text)
-
+            print(res.text)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
-        sys.exit(1)
+
+def handle_account_balance():
+    """获取所有账户的资产余额并打印关键信息"""
+    try:
+        client = get_trade_client()
+        
+        # 1. 先获取账户列表
+        list_res = client.account_v2.get_account_list()
+        if list_res.status_code != 200:
+            print(f"无法获取账户列表: {list_res.text}")
+            return
+
+        # 修正1: 根据你的日志，返回的直接就是列表，不需要 .get('data')
+        account_list = list_res.json()
+
+        if not account_list:
+            print("未找到有效账户。")
+            return
+
+        print(f"发现 {len(account_list)} 个账户，开始查询余额...\n")
+
+        # 2. 遍历每个账户查询余额
+        for acct in account_list:
+            # 修正2: 根据你的日志，Key 是 "account_id"
+            account_id = acct.get('account_id')
+            
+            if not account_id:
+                print("跳过: 无法在账户信息中找到 account_id")
+                continue
+
+            account_type = acct.get('account_type', 'Unknown') # 修正 Key 为 account_type
+            
+            print(f"--- 账户 ID: {account_id} (类型: {account_type}) ---")
+            
+            # 调用 Balance 接口
+            bal_res = client.account_v2.get_account_balance(account_id)
+            
+            if bal_res.status_code == 200:
+                data = bal_res.json()
+                
+                # 打印主要信息 (提取关键字段，避免满屏 JSON)
+                # 注意：不同账户类型返回字段可能略有不同，使用 .get 防止报错
+                summary = {
+                    "净资产 (Net Liquidation)": data.get('netLiquidation'),
+                    "总市值 (Total Market Value)": data.get('totalMarketValue'),
+                    "现金余额 (Cash Balance)": data.get('cashBalance'),
+                    "可用购买力 (Buying Power)": data.get('buyingPower'),
+                    "未实现盈亏 (Unrealized P&L)": data.get('unrealizedProfitLoss'),
+                    "币种 (Currency)": data.get('currency')
+                }
+
+                # 格式化打印
+                for k, v in summary.items():
+                    print(f"{k:<30}: {v}")
+                
+                # 如果你想看完整原始数据，取消下面这行的注释
+                # print(json.dumps(data, indent=4))
+                
+            else:
+                print(f"获取余额失败: {bal_res.status_code}")
+            
+            print("-" * 50 + "\n")
+
+    except Exception as e:
+        print(f"执行出错: {e}", file=sys.stderr)
 
 def main():
     parser = argparse.ArgumentParser(description="Webull OpenAPI CLI")
@@ -62,13 +108,15 @@ def main():
     
     # 'account' 子命令
     account_parser = subparsers.add_parser('account')
-    account_parser.add_argument('action', choices=['list'])
+    account_parser.add_argument('action', choices=['list', 'balance'], help='Action to perform')
 
     args = parser.parse_args()
 
     if args.command == 'account':
         if args.action == 'list':
             handle_account_list()
+        elif args.action == 'balance':
+            handle_account_balance()
 
 if __name__ == "__main__":
     main()
