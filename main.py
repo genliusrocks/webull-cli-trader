@@ -78,7 +78,7 @@ def handle_account_balance():
                 buying_power = "N/A"
                 assets_list = data.get('account_currency_assets')
                 if assets_list and isinstance(assets_list, list) and len(assets_list) > 0:
-                    buying_power = assets_list[0].get('buying_power')
+                    buying_power = assets_list[0].get('day_buying_power')
 
                 # 2. 映射字段 (针对你的真实 JSON 返回)
                 summary = {
