@@ -150,6 +150,31 @@ def format_price(value, default="-") -> str:
         return str(value)
 
 
+def format_qty(value) -> str:
+    if value is None or value == "":
+        return "0"
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    return str(int(round(number)))
+
+
+def format_fill_time(detail: dict) -> str:
+    time_value = (
+        detail.get("filled_time")
+        or detail.get("filled_time_at")
+        or detail.get("fill_time")
+        or detail.get("filledTime")
+        or detail.get("filledAt")
+        or detail.get("execution_time")
+        or detail.get("last_filled_time")
+    )
+    if not time_value:
+        return "-"
+    return format_time(time_value)
+
+
 def print_orders(orders_list):
     if not orders_list:
         print(">>> 当前没有订单。")
@@ -161,11 +186,11 @@ def print_orders(orders_list):
 
     header = (
         f"{'Symbol':<8} {'Side':<5} {'Type':<8} {'Price':<10} {'Fill':<10} "
-        f"{'Qty':<8} {'Status':<12} {'Time (UTC)':<20} {'Order ID'}"
+        f"{'Qty':<8} {'Status':<12} {'Time (UTC)':<20} {'Fill Time (UTC)':<20} {'Order ID'}"
     )
-    print("-" * 110)
+    print("-" * 130)
     print(header)
-    print("-" * 110)
+    print("-" * 130)
 
     for order in orders_list:
         if not isinstance(order, dict):
@@ -208,18 +233,19 @@ def print_orders(orders_list):
         filled_qty = (
             detail.get("filled_quantity") or detail.get("filled_qty") or detail.get("filledQuantity") or 0
         )
-        qty_str = f"{filled_qty}/{total_qty}"
+        qty_str = f"{format_qty(filled_qty)}/{format_qty(total_qty)}"
 
         status = detail.get("status") or detail.get("order_status") or "Unknown"
         time_str = detail.get("place_time_at") or detail.get("place_time") or detail.get("create_time") or ""
         time_str = format_time(time_str)
+        fill_time_str = format_fill_time(detail)
         order_id = detail.get("order_id") or order.get("client_order_id")
 
         print(
             f"{symbol:<8} {side:<5} {order_type:<8} {price_display:<10} {fill_display:<10} "
-            f"{qty_str:<8} {status:<12} {time_str:<20} {order_id}"
+            f"{qty_str:<8} {status:<12} {time_str:<20} {fill_time_str:<20} {order_id}"
         )
-    print("-" * 110)
+    print("-" * 130)
 
 
 def print_positions(positions):
