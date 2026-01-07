@@ -84,6 +84,15 @@ def format_time(time_str) -> str:
     return str(time_str)
 
 
+def format_price(value, default="-") -> str:
+    if value is None or value == "":
+        return default
+    try:
+        return f"{float(value):.2f}"
+    except (TypeError, ValueError):
+        return str(value)
+
+
 def print_orders(orders_list):
     if not orders_list:
         print(">>> 当前没有订单。")
@@ -94,12 +103,12 @@ def print_orders(orders_list):
         return
 
     header = (
-        f"{'Symbol':<8} {'Side':<5} {'Type':<8} {'Price':<10} "
+        f"{'Symbol':<8} {'Side':<5} {'Type':<8} {'Price':<10} {'Fill':<10} "
         f"{'Qty':<8} {'Status':<12} {'Time (UTC)':<20} {'Order ID'}"
     )
-    print("-" * 100)
+    print("-" * 110)
     print(header)
-    print("-" * 100)
+    print("-" * 110)
 
     for order in orders_list:
         if not isinstance(order, dict):
@@ -122,7 +131,21 @@ def print_orders(orders_list):
         if order_type == "MARKET":
             price_display = "MKT"
         else:
-            price_display = str(limit_price) if limit_price else "0.0"
+            price_display = format_price(limit_price, default="0.0")
+
+        fill_price = (
+            detail.get("filled_price")
+            or detail.get("filledPrice")
+            or detail.get("avg_filled_price")
+            or detail.get("avgFilledPrice")
+            or detail.get("avg_price")
+            or detail.get("avgPrice")
+            or detail.get("average_price")
+            or detail.get("averagePrice")
+            or detail.get("exec_price")
+            or detail.get("executed_price")
+        )
+        fill_display = format_price(fill_price)
 
         total_qty = detail.get("total_quantity") or detail.get("quantity") or detail.get("totalQuantity") or 0
         filled_qty = (
@@ -136,10 +159,10 @@ def print_orders(orders_list):
         order_id = detail.get("order_id") or order.get("client_order_id")
 
         print(
-            f"{symbol:<8} {side:<5} {order_type:<8} {price_display:<10} "
+            f"{symbol:<8} {side:<5} {order_type:<8} {price_display:<10} {fill_display:<10} "
             f"{qty_str:<8} {status:<12} {time_str:<20} {order_id}"
         )
-    print("-" * 100)
+    print("-" * 110)
 
 
 def print_positions(positions):
