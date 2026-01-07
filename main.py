@@ -4,7 +4,7 @@ import os
 import sys
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from webull.core.client import ApiClient
 from webull.trade.trade_client import TradeClient
@@ -86,7 +86,7 @@ def format_time(time_str) -> str:
     return str(time_str)
 
 
-def parse_utc_date(date_str: str) -> datetime.date:
+def parse_utc_date(date_str: str) -> date:
     return datetime.strptime(date_str, "%y%m%d").replace(tzinfo=timezone.utc).date()
 
 
@@ -127,7 +127,7 @@ def filter_orders_by_status(orders_list, status: str):
     return filtered
 
 
-def filter_orders_by_date(orders_list, target_date: datetime.date | None):
+def filter_orders_by_date(orders_list, target_date: date | None):
     if target_date is None:
         return orders_list
     filtered = []
