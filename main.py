@@ -33,7 +33,6 @@ def get_first_account_id(client):
         sys.exit(1)
     
     data = list_res.json()
-    # 兼容处理：有时账户列表在 'data' 字段中
     if isinstance(data, dict):
         account_list = data.get('data', [])
     else:
@@ -43,23 +42,28 @@ def get_first_account_id(client):
         print("未找到有效账户。")
         sys.exit(1)
         
-    # 优先寻找 account_id
     first_acct = account_list[0]
     acct_id = first_acct.get('account_id') or first_acct.get('secAccountId')
     return str(acct_id)
+
+def extract_list_from_response(json_data):
+    """通用工具：从响应中提取列表数据"""
+    if isinstance(json_data, list):
+        return json_data
+    elif isinstance(json_data, dict):
+        return json_data.get('data') or json_data.get('items') or []
+    return []
 
 # ================= 辅助打印功能 =================
 
 def print_orders(orders_list):
     """格式化打印订单列表"""
     if not orders_list:
-        print(">>> 没有找到订单。")
+        print(">>> 当前没有订单。")
         return
 
-    # 再次确保传入的是列表
     if not isinstance(orders_list, list):
-        print(f"错误: 订单数据格式不正确 (期望 List, 实际 {type(orders_list)})")
-        print(f"原始数据: {orders_list}")
+        print(f"数据格式错误: {orders_list}")
         return
 
     # 表头
@@ -69,9 +73,7 @@ def print_orders(orders_list):
     print("-" * 100)
 
     for order in orders_list:
-        # 防御性编程: 如果列表里混入了字符串，跳过
-        if not isinstance(order, dict):
-            continue
+        if not isinstance(order, dict): continue
 
         symbol = order.get('symbol', 'N/A')
         side = order.get('side', 'N/A')
@@ -84,7 +86,7 @@ def print_orders(orders_list):
         elif not price and order.get('avg_filled_price'):
             price = order.get('avg_filled_price')
         
-        qty = f"{order.get('filled_qty', 0)}/{order.get('quantity', 0)}" # 显示 成交/总数
+        qty = f"{order.get('filled_qty', 0)}/{order.get('quantity', 0)}"
         status = order.get('status') or order.get('order_status', 'Unknown')
         
         # 时间处理
@@ -97,19 +99,10 @@ def print_orders(orders_list):
         print(f"{symbol:<8} {side:<5} {order_type:<8} {str(price):<10} {qty:<8} {status:<12} {time_str:<20} {order_id}")
     print("-" * 100)
 
-def extract_list_from_response(json_data):
-    """通用工具：从响应中提取列表数据"""
-    if isinstance(json_data, list):
-        return json_data
-    elif isinstance(json_data, dict):
-        # 常见包裹字段
-        return json_data.get('data') or json_data.get('items') or []
-    return []
-
 # ================= 订单查询功能 =================
 
 def handle_orders(status):
-    """处理订单查询逻辑 (Debug版)"""
+    """处理订单查询逻辑 (最终修复版)"""
     try:
         client = get_trade_client()
         account_id = get_first_account_id(client)
@@ -117,62 +110,50 @@ def handle_orders(status):
 
         orders = []
         
-        # --- 调试 V2 接口 ---
-        # 1. 检查 client 是否有 order_v2 属性
-        if not hasattr(client, 'order_v2'):
-            print("调试信息: client 对象没有 'order_v2' 属性。将使用旧版 'order' 接口。")
-            use_v2 = False
-        else:
-            use_v2 = True
-
-        if use_v2:
+        # 使用确认存在的 V2 方法
+        if hasattr(client, 'order_v2'):
             try:
-                print("尝试调用 V2 接口...")
+                res = None
+                
+                # 1. 查询 Open Orders
                 if status == 'open':
-                    # 尝试调用，如果报错会打印出来
-                    res = client.order_v2.list_open_orders(account_id, page_size=50)
-                else:
-                    res = client.order_v2.list_today_orders(account_id, page_size=100)
+                    # 对应: get_order_open
+                    if hasattr(client.order_v2, 'get_order_open'):
+                        res = client.order_v2.get_order_open(account_id)
+                    else:
+                        print("错误: 找不到 get_order_open 方法")
 
-                if res.status_code == 200:
+                # 2. 查询 All / Executed
+                else:
+                    # 对应: get_order_history_request
+                    # 注意: 这个名字通常包含今日订单
+                    if hasattr(client.order_v2, 'get_order_history_request'):
+                        res = client.order_v2.get_order_history_request(account_id)
+                    else:
+                        print("错误: 找不到 get_order_history_request 方法")
+
+                if res and res.status_code == 200:
                     orders = extract_list_from_response(res.json())
-                    # 如果成功拿到数据，直接打印并结束，不再走 Legacy
+                    
+                    # 过滤逻辑
                     if status == 'executed':
+                        # 过滤出已成交
                         orders = [o for o in orders if o.get('status') in ['Filled', 'Partial Filled']]
+                    
                     print_orders(orders)
                     return
-                else:
-                    print(f"V2 接口返回错误: Status={res.status_code}")
-                    print(f"响应内容: {res.text}")
-                    print("--> 准备尝试 Legacy 接口...")
-
+                elif res:
+                    print(f"查询失败: {res.status_code} {res.text}")
+                
             except Exception as e:
-                # 这里打印出关键的报错信息
-                print(f"!!! V2 接口调用发生异常: {type(e).__name__}: {e}")
-                print("--> 准备尝试 Legacy 接口...")
-
-        # 2. Fallback 到旧版接口 (client.order)
-        print("提示: 正在使用 client.order (Legacy) 接口...")
-        try:
-            if status == 'open':
-                res = client.order.list_open_orders(account_id)
-            else:
-                res = client.order.list_today_orders(account_id)
-            
-            if res.status_code == 200:
-                orders = extract_list_from_response(res.json())
-                if status == 'executed':
-                    orders = [o for o in orders if o.get('status') in ['Filled', 'Partial Filled']]
-                print_orders(orders)
-            else:
-                print(f"Legacy 查询失败: {res.text}")
-        except Exception as e:
-            print(f"接口调用完全失败: {e}")
+                print(f"V2 接口调用出错: {e}")
+        else:
+            print("错误: client 对象没有 order_v2 属性。")
 
     except Exception as e:
         print(f"执行出错: {e}", file=sys.stderr)
 
-# ================= 账户查询功能 =================
+# ================= 账户与交易功能 (保持不变) =================
 
 def handle_account_list():
     try:
@@ -192,13 +173,10 @@ def handle_account_balance():
         client = get_trade_client()
         list_res = client.account_v2.get_account_list()
         if list_res.status_code != 200: return
-        
         data = list_res.json()
         account_list = data.get('data') if isinstance(data, dict) else data
-        
         if not account_list: return
         print(f"发现 {len(account_list)} 个账户，开始查询余额...\n")
-        
         for acct in account_list:
             account_id = acct.get('account_id')
             if not account_id: continue
@@ -255,8 +233,6 @@ def handle_account_positions():
     except Exception as e:
         print(f"执行出错: {e}", file=sys.stderr)
 
-# ================= 下单交易功能 =================
-
 def handle_trade(side, args):
     """处理买卖下单逻辑"""
     try:
@@ -300,58 +276,46 @@ def handle_trade(side, args):
         else:
             print(f">>> 下单失败: {res.status_code}")
             print(res.text)
-
     except Exception as e:
         print(f"交易出错: {e}", file=sys.stderr)
-
-# ================= 主入口 =================
 
 def main():
     parser = argparse.ArgumentParser(description="Webull OpenAPI CLI Trader")
     subparsers = parser.add_subparsers(dest='command', required=True)
     
-    # Account
-    account_parser = subparsers.add_parser('account', help='Account management')
-    account_parser.add_argument('action', choices=['list', 'balance', 'positions'], help='Action')
+    subparsers.add_parser('account', help='Account').add_argument('action', choices=['list', 'balance', 'positions'])
+    
+    orders_parser = subparsers.add_parser('orders', help='Orders')
+    orders_parser.add_argument('status', nargs='?', choices=['open', 'executed', 'all'], default='open')
 
-    # Orders
-    orders_parser = subparsers.add_parser('orders', help='List orders')
-    orders_parser.add_argument('status', nargs='?', choices=['open', 'executed', 'all'], default='open', help='Order status')
+    buy_parser = subparsers.add_parser('buy', help='Buy')
+    buy_parser.add_argument('symbol')
+    buy_parser.add_argument('order_type', choices=['limit', 'market', 'stop'])
+    buy_parser.add_argument('quantity', type=int)
+    buy_parser.add_argument('price', nargs='?', type=float)
+    buy_parser.add_argument('--aux', type=float)
 
-    # Buy
-    buy_parser = subparsers.add_parser('buy', help='Place a BUY order')
-    buy_parser.add_argument('symbol', help='Stock Symbol')
-    buy_parser.add_argument('order_type', choices=['limit', 'market', 'stop'], help='Order Type')
-    buy_parser.add_argument('quantity', type=int, help='Quantity')
-    buy_parser.add_argument('price', nargs='?', type=float, help='Limit Price')
-    buy_parser.add_argument('--aux', type=float, help='Stop Price')
-
-    # Sell
-    sell_parser = subparsers.add_parser('sell', help='Place a SELL order')
-    sell_parser.add_argument('symbol', help='Stock Symbol')
-    sell_parser.add_argument('order_type', choices=['limit', 'market', 'stop'], help='Order Type')
-    sell_parser.add_argument('quantity', type=int, help='Quantity')
-    sell_parser.add_argument('price', nargs='?', type=float, help='Limit Price')
-    sell_parser.add_argument('--aux', type=float, help='Stop Price')
+    sell_parser = subparsers.add_parser('sell', help='Sell')
+    sell_parser.add_argument('symbol')
+    sell_parser.add_argument('order_type', choices=['limit', 'market', 'stop'])
+    sell_parser.add_argument('quantity', type=int)
+    sell_parser.add_argument('price', nargs='?', type=float)
+    sell_parser.add_argument('--aux', type=float)
 
     args = parser.parse_args()
 
     if args.command == 'account':
-        if args.action == 'list':
-            handle_account_list()
-        elif args.action == 'balance':
-            handle_account_balance()
-        elif args.action == 'positions':
-            handle_account_positions()
-            
+        if args.action == 'list': handle_account_list()
+        elif args.action == 'balance': handle_account_balance()
+        elif args.action == 'positions': handle_account_positions()
     elif args.command == 'orders':
         handle_orders(args.status)
-    
     elif args.command == 'buy':
         handle_trade('BUY', args)
-        
     elif args.command == 'sell':
         handle_trade('SELL', args)
 
 if __name__ == "__main__":
     main()
+
+
