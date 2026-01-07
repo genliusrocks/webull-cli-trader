@@ -227,12 +227,12 @@ def handle_account_balance():
                 if assets_list and isinstance(assets_list, list) and len(assets_list) > 0:
                     buying_power = assets_list[0].get('day_buying_power') or assets_list[0].get('buying_power')
                 summary = {
-                    "净资产": data.get('total_net_liquidation_value'),
-                    "总市值": data.get('total_market_value'),
-                    "现金": data.get('total_cash_balance'),
-                    "购买力": buying_power,
-                    "浮盈": data.get('total_unrealized_profit_loss'),
-                    "当日盈亏": data.get('total_day_profit_loss')
+                    "Net Liquidation Value": data.get('total_net_liquidation_value'),
+                    "Total Market Value": data.get('total_market_value'),
+                    "Cash": data.get('total_cash_balance'),
+                    "Buying Power": buying_power,
+                    "Unrealized P&L": data.get('total_unrealized_profit_loss'),
+                    "Day P&L": data.get('total_day_profit_loss'),
                 }
                 for k, v in summary.items():
                     print(f"{k:<15}: {v}")
