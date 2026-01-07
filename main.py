@@ -98,7 +98,7 @@ def handle_account_balance():
         print(f"执行出错: {e}", file=sys.stderr)
 
 def handle_account_positions():
-    """获取并打印持仓"""
+    """获取并打印持仓 (增加 Diluted Cost 列)"""
     try:
         client = get_trade_client()
         account_id = get_first_account_id(client)
@@ -112,7 +112,8 @@ def handle_account_positions():
                 print("当前无持仓。")
                 return
             
-            header = f"{'Symbol':<10} {'Qty':<10} {'Last Price':<12} {'Mkt Value':<12} {'Cost':<10} {'Unrealized P&L':<15}"
+            # 修改表头，增加 Diluted Cost
+            header = f"{'Symbol':<10} {'Qty':<10} {'Last':<10} {'Diluted Cost':<15} {'Mkt Value':<12} {'Total Cost':<12} {'Unrealized P&L':<15}"
             print(header)
             print("-" * len(header))
 
@@ -120,12 +121,27 @@ def handle_account_positions():
                 ticker = pos.get('ticker', {})
                 symbol = ticker.get('symbol') or pos.get('symbol') or "Unknown"
                 qty = pos.get('position') or pos.get('quantity') or "0"
-                last = pos.get('last_price') or pos.get('lastPrice') or "0.00"
-                mkt_val = pos.get('market_value') or pos.get('marketValue') or "0.00"
-                cost = pos.get('cost') or pos.get('costPrice') or "0.00"
-                pnl = pos.get('unrealized_profit_loss') or pos.get('unrealizedProfitLoss') or "0.00"
                 
-                print(f"{symbol:<10} {qty:<10} {last:<12} {mkt_val:<12} {cost:<10} {pnl:<15}")
+                # 获取价格数据
+                last = float(pos.get('last_price') or pos.get('lastPrice') or 0)
+                mkt_val = float(pos.get('market_value') or pos.get('marketValue') or 0)
+                
+                # cost 通常是总成本
+                total_cost = float(pos.get('cost') or 0)
+                
+                # costPrice 通常是单位成本 (Diluted Cost)
+                # 如果没有 costPrice，则用 总成本 / 数量 计算
+                diluted_cost = float(pos.get('costPrice') or 0)
+                if diluted_cost == 0 and float(qty) != 0:
+                    diluted_cost = total_cost / float(qty)
+                
+                pnl = float(pos.get('unrealized_profit_loss') or pos.get('unrealizedProfitLoss') or 0)
+                
+                # 简单的颜色处理 (P&L)
+                # 注意: 终端颜色代码可能需要您的终端支持
+                pnl_str = f"{pnl:.2f}"
+                
+                print(f"{symbol:<10} {qty:<10} {last:<10.2f} {diluted_cost:<15.2f} {mkt_val:<12.2f} {total_cost:<12.2f} {pnl_str:<15}")
         else:
             print(f"获取持仓失败: {res.status_code}")
             print(res.text)
