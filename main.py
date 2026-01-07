@@ -29,13 +29,25 @@ def resolve_token_path() -> str:
     return os.getenv(TOKEN_PATH_ENV_VAR, DEFAULT_TOKEN_PATH)
 
 
+def normalize_token(token: str | None) -> str | None:
+    if token is None:
+        return None
+    cleaned = token.strip()
+    if not cleaned:
+        return None
+    if "\n" in cleaned or "\r" in cleaned:
+        cleaned = cleaned.splitlines()[0].strip()
+    return cleaned or None
+
+
 def cache_token_in_env(token: str | None) -> None:
-    if token:
-        os.environ[TOKEN_ENV_VAR] = token
+    cleaned = normalize_token(token)
+    if cleaned:
+        os.environ[TOKEN_ENV_VAR] = cleaned
 
 
 def load_token_from_env_or_file() -> str | None:
-    token = os.getenv(TOKEN_ENV_VAR)
+    token = normalize_token(os.getenv(TOKEN_ENV_VAR))
     if token:
         return token
     token_path = resolve_token_path()
@@ -43,7 +55,7 @@ def load_token_from_env_or_file() -> str | None:
         return None
     try:
         with open(token_path, "r", encoding="utf-8") as token_file:
-            token = token_file.read().strip()
+            token = normalize_token(token_file.read())
     except OSError:
         return None
     if token:
