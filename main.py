@@ -109,7 +109,7 @@ def extract_list_from_response(json_data):
 # ================= 订单查询功能 =================
 
 def handle_orders(status):
-    """处理订单查询逻辑"""
+    """处理订单查询逻辑 (Debug版)"""
     try:
         client = get_trade_client()
         account_id = get_first_account_id(client)
@@ -117,45 +117,57 @@ def handle_orders(status):
 
         orders = []
         
-        try:
-            # 1. 尝试使用 V2 接口
-            if status == 'open':
-                res = client.order_v2.list_open_orders(account_id, page_size=50)
-            else: # executed or all
-                res = client.order_v2.list_today_orders(account_id, page_size=100)
+        # --- 调试 V2 接口 ---
+        # 1. 检查 client 是否有 order_v2 属性
+        if not hasattr(client, 'order_v2'):
+            print("调试信息: client 对象没有 'order_v2' 属性。将使用旧版 'order' 接口。")
+            use_v2 = False
+        else:
+            use_v2 = True
 
+        if use_v2:
+            try:
+                print("尝试调用 V2 接口...")
+                if status == 'open':
+                    # 尝试调用，如果报错会打印出来
+                    res = client.order_v2.list_open_orders(account_id, page_size=50)
+                else:
+                    res = client.order_v2.list_today_orders(account_id, page_size=100)
+
+                if res.status_code == 200:
+                    orders = extract_list_from_response(res.json())
+                    # 如果成功拿到数据，直接打印并结束，不再走 Legacy
+                    if status == 'executed':
+                        orders = [o for o in orders if o.get('status') in ['Filled', 'Partial Filled']]
+                    print_orders(orders)
+                    return
+                else:
+                    print(f"V2 接口返回错误: Status={res.status_code}")
+                    print(f"响应内容: {res.text}")
+                    print("--> 准备尝试 Legacy 接口...")
+
+            except Exception as e:
+                # 这里打印出关键的报错信息
+                print(f"!!! V2 接口调用发生异常: {type(e).__name__}: {e}")
+                print("--> 准备尝试 Legacy 接口...")
+
+        # 2. Fallback 到旧版接口 (client.order)
+        print("提示: 正在使用 client.order (Legacy) 接口...")
+        try:
+            if status == 'open':
+                res = client.order.list_open_orders(account_id)
+            else:
+                res = client.order.list_today_orders(account_id)
+            
             if res.status_code == 200:
                 orders = extract_list_from_response(res.json())
+                if status == 'executed':
+                    orders = [o for o in orders if o.get('status') in ['Filled', 'Partial Filled']]
+                print_orders(orders)
             else:
-                print(f"V2 查询失败: {res.status_code} {res.text}")
-                # 只有 V2 失败且不是 404/500 时才考虑 fallback，这里简单起见让它继续尝试 fallback
-                # 但通常如果 V2 存在，就不应该 fallback。这里保留 fallback 是为了兼容你的旧版 SDK
-                raise AttributeError("Force fallback if needed") 
-
-        except (AttributeError, Exception):
-            # 2. Fallback 到旧版接口 (client.order)
-            print("提示: 尝试使用 client.order (Legacy) 接口...")
-            try:
-                if status == 'open':
-                    res = client.order.list_open_orders(account_id)
-                else:
-                    res = client.order.list_today_orders(account_id)
-                
-                if res.status_code == 200:
-                    # === 关键修复点：解析数据结构 ===
-                    orders = extract_list_from_response(res.json())
-                else:
-                    print(f"查询失败: {res.text}")
-                    return
-            except Exception as e_legacy:
-                print(f"接口调用完全失败: {e_legacy}")
-                return
-
-        # 3. 如果是 'executed' 模式，在本地过滤
-        if status == 'executed':
-            orders = [o for o in orders if o.get('status') in ['Filled', 'Partial Filled']]
-
-        print_orders(orders)
+                print(f"Legacy 查询失败: {res.text}")
+        except Exception as e:
+            print(f"接口调用完全失败: {e}")
 
     except Exception as e:
         print(f"执行出错: {e}", file=sys.stderr)
