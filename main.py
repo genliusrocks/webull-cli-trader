@@ -21,12 +21,18 @@ class WebullConfig:
 
 
 TOKEN_ENV_VAR = "WEBULL_ACCESS_TOKEN"
+TOKEN_ENV_FILE_ENV_VAR = "WEBULL_TOKEN_ENV_FILE"
 TOKEN_PATH_ENV_VAR = "WEBULL_TOKEN_PATH"
 DEFAULT_TOKEN_PATH = os.path.join(os.path.dirname(__file__), "conf", "token.txt")
+DEFAULT_TOKEN_ENV_FILE = os.path.join(os.path.dirname(__file__), "conf", "token.env")
 
 
 def resolve_token_path() -> str:
     return os.getenv(TOKEN_PATH_ENV_VAR, DEFAULT_TOKEN_PATH)
+
+
+def resolve_token_env_file_path() -> str:
+    return os.getenv(TOKEN_ENV_FILE_ENV_VAR, DEFAULT_TOKEN_ENV_FILE)
 
 
 def normalize_token(token: str | None) -> str | None:
@@ -46,20 +52,44 @@ def cache_token_in_env(token: str | None) -> None:
         os.environ[TOKEN_ENV_VAR] = cleaned
 
 
+def read_token_from_file(path: str) -> str | None:
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as token_file:
+            return normalize_token(token_file.read())
+    except OSError:
+        return None
+
+
+def write_token_to_file(path: str, token: str | None) -> None:
+    cleaned = normalize_token(token)
+    if not cleaned:
+        return
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    try:
+        with open(path, "w", encoding="utf-8") as token_file:
+            token_file.write(f"{cleaned}\n")
+    except OSError:
+        return
+
+
 def load_token_from_env_or_file() -> str | None:
     token = normalize_token(os.getenv(TOKEN_ENV_VAR))
     if token:
         return token
-    token_path = resolve_token_path()
-    if not os.path.exists(token_path):
-        return None
-    try:
-        with open(token_path, "r", encoding="utf-8") as token_file:
-            token = normalize_token(token_file.read())
-    except OSError:
-        return None
+    token_env_file = resolve_token_env_file_path()
+    token = read_token_from_file(token_env_file)
     if token:
         cache_token_in_env(token)
+        return token
+    token_path = resolve_token_path()
+    token = read_token_from_file(token_path)
+    if token:
+        cache_token_in_env(token)
+        write_token_to_file(token_env_file, token)
     return token or None
 
 
@@ -87,8 +117,6 @@ def apply_token_to_client(api_client: ApiClient, token: str | None) -> None:
 
 
 def update_env_token_from_client(api_client: ApiClient) -> None:
-    if os.getenv(TOKEN_ENV_VAR):
-        return
     candidate = None
     for attr in ("access_token", "token"):
         if hasattr(api_client, attr):
@@ -104,7 +132,11 @@ def update_env_token_from_client(api_client: ApiClient) -> None:
                 candidate = None
         if not candidate and hasattr(token_manager, "token"):
             candidate = token_manager.token
-    cache_token_in_env(candidate)
+    if not candidate:
+        return
+    if not os.getenv(TOKEN_ENV_VAR):
+        cache_token_in_env(candidate)
+    write_token_to_file(resolve_token_env_file_path(), candidate)
 
 
 def load_config() -> WebullConfig:
