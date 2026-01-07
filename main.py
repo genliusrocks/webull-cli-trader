@@ -4,7 +4,7 @@ import os
 import sys
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from webull.core.client import ApiClient
 from webull.trade.trade_client import TradeClient
@@ -78,10 +78,67 @@ def format_time(time_str) -> str:
         return str(time_str).replace("T", " ").split(".")[0]
     if str(time_str).isdigit():
         try:
-            return datetime.fromtimestamp(int(time_str) / 1000).strftime("%Y-%m-%d %H:%M:%S")
+            return datetime.fromtimestamp(int(time_str) / 1000, tz=timezone.utc).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
         except ValueError:
             return str(time_str)
     return str(time_str)
+
+
+def parse_utc_date(date_str: str) -> datetime.date:
+    return datetime.strptime(date_str, "%y%m%d").replace(tzinfo=timezone.utc).date()
+
+
+def extract_order_time(detail: dict) -> datetime | None:
+    time_value = detail.get("place_time_at") or detail.get("place_time") or detail.get("create_time")
+    if time_value is None:
+        return None
+    time_str = str(time_value)
+    if time_str.isdigit():
+        try:
+            return datetime.fromtimestamp(int(time_str) / 1000, tz=timezone.utc)
+        except ValueError:
+            return None
+    if "T" in time_str:
+        try:
+            normalized = time_str.replace("Z", "+00:00")
+            parsed = datetime.fromisoformat(normalized)
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc)
+        except ValueError:
+            return None
+    return None
+
+
+def filter_orders_by_status(orders_list, status: str):
+    if status != "executed":
+        return orders_list
+    allowed_statuses = {"filled", "partially_filled", "partiallyfilled"}
+    filtered = []
+    for order in orders_list:
+        if not isinstance(order, dict):
+            continue
+        detail = order["orders"][0] if isinstance(order.get("orders"), list) and order["orders"] else order
+        order_status = str(detail.get("status") or detail.get("order_status") or "").lower()
+        if order_status.replace(" ", "_") in allowed_statuses:
+            filtered.append(order)
+    return filtered
+
+
+def filter_orders_by_date(orders_list, target_date: datetime.date | None):
+    if target_date is None:
+        return orders_list
+    filtered = []
+    for order in orders_list:
+        if not isinstance(order, dict):
+            continue
+        detail = order["orders"][0] if isinstance(order.get("orders"), list) and order["orders"] else order
+        order_time = extract_order_time(detail)
+        if order_time and order_time.date() == target_date:
+            filtered.append(order)
+    return filtered
 
 
 def format_price(value, default="-") -> str:
@@ -189,11 +246,15 @@ def print_positions(positions):
 # ================= 命令处理 =================
 
 
-def handle_orders(api: WebullApiAdapter, status: str):
+def handle_orders(api: WebullApiAdapter, status: str, date_str: str | None):
     try:
         client = api.get_trade_client()
         account_id = api.get_first_account_id(client)
-        print(f"正在查询账户 {account_id} 的订单 (模式: {status})...")
+        date_note = ""
+        if status != "open":
+            query_date = date_str or datetime.now(timezone.utc).strftime("%y%m%d")
+            date_note = f", 日期: {query_date} (UTC)"
+        print(f"正在查询账户 {account_id} 的订单 (模式: {status}{date_note})...")
 
         if hasattr(client, "order_v2"):
             try:
@@ -212,6 +273,13 @@ def handle_orders(api: WebullApiAdapter, status: str):
 
                 if res and res.status_code == 200:
                     orders = api.extract_list_from_response(res.json())
+                    if status != "open":
+                        if date_str is None:
+                            target_date = datetime.now(timezone.utc).date()
+                        else:
+                            target_date = parse_utc_date(date_str)
+                        orders = filter_orders_by_date(orders, target_date)
+                    orders = filter_orders_by_status(orders, status)
                     print_orders(orders)
                     return
 
@@ -353,6 +421,7 @@ def main():
     
     orders_parser = subparsers.add_parser('orders', help='Orders')
     orders_parser.add_argument('status', nargs='?', choices=['open', 'executed', 'all'], default='open')
+    orders_parser.add_argument('--date', help='Orders date in yymmdd (UTC). Default: today when status is executed/all.')
 
     buy_parser = subparsers.add_parser('buy', help='Buy')
     buy_parser.add_argument('symbol')
@@ -378,7 +447,7 @@ def main():
         elif args.action == 'positions':
             handle_account_positions(api)
     elif args.command == 'orders':
-        handle_orders(api, args.status)
+        handle_orders(api, args.status, args.date)
     elif args.command == 'buy':
         handle_trade(api, 'BUY', args)
     elif args.command == 'sell':
