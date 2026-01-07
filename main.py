@@ -86,6 +86,15 @@ def format_time(time_str) -> str:
     return str(time_str)
 
 
+def format_time_only(time_value) -> str:
+    formatted = format_time(time_value)
+    if formatted == "-" or formatted == "":
+        return formatted
+    if " " in formatted:
+        return formatted.split(" ", 1)[1]
+    return formatted
+
+
 def parse_utc_date(date_str: str) -> date:
     return datetime.strptime(date_str, "%y%m%d").replace(tzinfo=timezone.utc).date()
 
@@ -172,7 +181,7 @@ def format_fill_time(detail: dict) -> str:
     )
     if not time_value:
         return "-"
-    return format_time(time_value)
+    return format_time_only(time_value)
 
 
 def print_orders(orders_list):
@@ -186,7 +195,7 @@ def print_orders(orders_list):
 
     header = (
         f"{'Symbol':<8} {'Side':<5} {'Type':<8} {'Price':<10} {'Fill':<10} "
-        f"{'Qty':<8} {'Status':<12} {'Time (UTC)':<20} {'Fill Time (UTC)':<20} {'Order ID'}"
+        f"{'Qty':<8} {'Status':<12} {'Time (UTC)':<10} {'Fill Time (UTC)':<10} {'Order ID'}"
     )
     print("-" * 130)
     print(header)
@@ -237,13 +246,13 @@ def print_orders(orders_list):
 
         status = detail.get("status") or detail.get("order_status") or "Unknown"
         time_str = detail.get("place_time_at") or detail.get("place_time") or detail.get("create_time") or ""
-        time_str = format_time(time_str)
+        time_str = format_time_only(time_str)
         fill_time_str = format_fill_time(detail)
         order_id = detail.get("order_id") or order.get("client_order_id")
 
         print(
             f"{symbol:<8} {side:<5} {order_type:<8} {price_display:<10} {fill_display:<10} "
-            f"{qty_str:<8} {status:<12} {time_str:<20} {fill_time_str:<20} {order_id}"
+            f"{qty_str:<8} {status:<12} {time_str:<10} {fill_time_str:<10} {order_id}"
         )
     print("-" * 130)
 
