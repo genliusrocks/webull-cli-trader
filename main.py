@@ -20,6 +20,125 @@ class WebullConfig:
     api_endpoint: str = "api.webull.com"
 
 
+TOKEN_ENV_VAR = "WEBULL_ACCESS_TOKEN"
+TOKEN_ENV_FILE_ENV_VAR = "WEBULL_TOKEN_ENV_FILE"
+TOKEN_PATH_ENV_VAR = "WEBULL_TOKEN_PATH"
+DEFAULT_TOKEN_PATH = os.path.join(os.path.dirname(__file__), "conf", "token.txt")
+DEFAULT_TOKEN_ENV_FILE = os.path.join(os.path.dirname(__file__), "conf", "token.env")
+
+
+def resolve_token_path() -> str:
+    return os.getenv(TOKEN_PATH_ENV_VAR, DEFAULT_TOKEN_PATH)
+
+
+def resolve_token_env_file_path() -> str:
+    return os.getenv(TOKEN_ENV_FILE_ENV_VAR, DEFAULT_TOKEN_ENV_FILE)
+
+
+def normalize_token(token: str | None) -> str | None:
+    if token is None:
+        return None
+    cleaned = token.strip()
+    if not cleaned:
+        return None
+    if "\n" in cleaned or "\r" in cleaned:
+        cleaned = cleaned.splitlines()[0].strip()
+    return cleaned or None
+
+
+def cache_token_in_env(token: str | None) -> None:
+    cleaned = normalize_token(token)
+    if cleaned:
+        os.environ[TOKEN_ENV_VAR] = cleaned
+
+
+def read_token_from_file(path: str) -> str | None:
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as token_file:
+            return normalize_token(token_file.read())
+    except OSError:
+        return None
+
+
+def write_token_to_file(path: str, token: str | None) -> None:
+    cleaned = normalize_token(token)
+    if not cleaned:
+        return
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    try:
+        with open(path, "w", encoding="utf-8") as token_file:
+            token_file.write(f"{cleaned}\n")
+    except OSError:
+        return
+
+
+def load_token_from_env_or_file() -> str | None:
+    token = normalize_token(os.getenv(TOKEN_ENV_VAR))
+    if token:
+        return token
+    token_env_file = resolve_token_env_file_path()
+    token = read_token_from_file(token_env_file)
+    if token:
+        cache_token_in_env(token)
+        return token
+    token_path = resolve_token_path()
+    token = read_token_from_file(token_path)
+    if token:
+        cache_token_in_env(token)
+        write_token_to_file(token_env_file, token)
+    return token or None
+
+
+def apply_token_to_client(api_client: ApiClient, token: str | None) -> None:
+    if not token:
+        return
+    if hasattr(api_client, "set_token"):
+        api_client.set_token(token)
+        return
+    if hasattr(api_client, "set_access_token"):
+        api_client.set_access_token(token)
+        return
+    if hasattr(api_client, "access_token"):
+        api_client.access_token = token
+        return
+    if hasattr(api_client, "token"):
+        api_client.token = token
+        return
+    token_manager = getattr(api_client, "token_manager", None)
+    if token_manager is not None:
+        if hasattr(token_manager, "set_token"):
+            token_manager.set_token(token)
+        elif hasattr(token_manager, "token"):
+            token_manager.token = token
+
+
+def update_env_token_from_client(api_client: ApiClient) -> None:
+    candidate = None
+    for attr in ("access_token", "token"):
+        if hasattr(api_client, attr):
+            candidate = getattr(api_client, attr)
+            if candidate:
+                break
+    token_manager = getattr(api_client, "token_manager", None)
+    if not candidate and token_manager is not None:
+        if hasattr(token_manager, "get_token"):
+            try:
+                candidate = token_manager.get_token()
+            except Exception:
+                candidate = None
+        if not candidate and hasattr(token_manager, "token"):
+            candidate = token_manager.token
+    if not candidate:
+        return
+    if not os.getenv(TOKEN_ENV_VAR):
+        cache_token_in_env(candidate)
+    write_token_to_file(resolve_token_env_file_path(), candidate)
+
+
 def load_config() -> WebullConfig:
     app_key = os.getenv("WEBULL_APP_KEY")
     app_secret = os.getenv("WEBULL_APP_SECRET")
@@ -39,6 +158,7 @@ class WebullApiAdapter:
     def get_trade_client(self) -> TradeClient:
         api_client = ApiClient(self.config.app_key, self.config.app_secret, self.config.region_id)
         api_client.add_endpoint(self.config.region_id, self.config.api_endpoint)
+        apply_token_to_client(api_client, load_token_from_env_or_file())
         return TradeClient(api_client)
 
     def get_first_account_id(self, client: TradeClient) -> str:
@@ -313,13 +433,15 @@ def handle_orders(api: WebullApiAdapter, status: str, date_str: str | None):
                             target_date = datetime.now(timezone.utc).date()
                         else:
                             target_date = parse_utc_date(date_str)
-                        orders = filter_orders_by_date(orders, target_date)
+                    orders = filter_orders_by_date(orders, target_date)
                     orders = filter_orders_by_status(orders, status)
                     print_orders(orders)
+                    update_env_token_from_client(client)
                     return
 
                 if res:
                     print(f"查询失败: {res.status_code} {res.text}")
+                update_env_token_from_client(client)
 
             except Exception as e:
                 print(f"V2 接口调用出错: {e}")
@@ -340,6 +462,7 @@ def handle_account_list(api: WebullApiAdapter):
         else:
             print(f"Failed. Status Code: {res.status_code}")
             print(res.text)
+        update_env_token_from_client(client)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
 
@@ -382,6 +505,7 @@ def handle_account_balance(api: WebullApiAdapter):
             else:
                 print(f"获取余额失败: {bal_res.text}")
             print("-" * 50)
+        update_env_token_from_client(client)
     except Exception as e:
         print(f"执行出错: {e}", file=sys.stderr)
 
@@ -398,6 +522,7 @@ def handle_account_positions(api: WebullApiAdapter):
         else:
             print(f"获取持仓失败: {res.status_code}")
             print(res.text)
+        update_env_token_from_client(client)
     except Exception as e:
         print(f"执行出错: {e}", file=sys.stderr)
 
@@ -444,6 +569,7 @@ def handle_trade(api: WebullApiAdapter, side: str, args):
         else:
             print(f">>> 下单失败: {res.status_code}")
             print(res.text)
+        update_env_token_from_client(client)
     except Exception as e:
         print(f"交易出错: {e}", file=sys.stderr)
 
