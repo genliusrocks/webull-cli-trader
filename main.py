@@ -57,6 +57,10 @@ def main():
     short_parser.add_argument('price', nargs='?', type=float, help='Price')
     short_parser.add_argument('--aux', type=float, help='Aux Price')
 
+    # --- [新增] Cancel 命令 ---
+    cancel_parser = subparsers.add_parser('cancel', help='Cancel an order')
+    cancel_parser.add_argument('order_id', help='Order ID to cancel')
+
     args = parser.parse_args()
 
     # --- 命令分发 ---
@@ -93,6 +97,10 @@ def main():
         # 新增: Short 专门用于做空，传递 'SELL_SHORT' 给 API
         # 注意: 确保你的账户类型是 Margin 账户，且有足够的保证金
         trade.handle_trade(api, 'SHORT', args)
+        
+    elif args.command == 'cancel':
+        # 调用刚刚在 trade.py 中添加的函数
+        trade.handle_cancel(api, args.order_id)
 
 if __name__ == "__main__":
     main()
