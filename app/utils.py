@@ -119,7 +119,7 @@ def format_fill_time(detail: dict) -> str:
 
 def print_orders(orders_list):
     if not orders_list:
-        logger.info(">>> 当前没有订单。")
+        print(">>> 当前没有订单。")
         return
 
     if not isinstance(orders_list, list):
@@ -130,9 +130,9 @@ def print_orders(orders_list):
         f"{'Symbol':<8} {'Side':<5} {'Type':<8} {'Price':<10} {'Fill':<10} "
         f"{'Qty':<8} {'Status':<12} {'Time (UTC)':<10} {'Fill Time (UTC)':<10} {'Order ID'}"
     )
-    logger.info("%s", "-" * 130)
-    logger.info("%s", header)
-    logger.info("%s", "-" * 130)
+    print("-" * 130)
+    print(header)
+    print("-" * 130)
 
     for order in orders_list:
         if not isinstance(order, dict):
@@ -183,12 +183,11 @@ def print_orders(orders_list):
         fill_time_str = format_fill_time(detail)
         order_id = detail.get("order_id") or order.get("client_order_id")
 
-        logger.info(
-            "%s",
+        print(
             f"{symbol:<8} {side:<5} {order_type:<8} {price_display:<10} {fill_display:<10} "
-            f"{qty_str:<8} {status:<12} {time_str:<10} {fill_time_str:<10} {order_id}",
+            f"{qty_str:<8} {status:<12} {time_str:<10} {fill_time_str:<10} {order_id}"
         )
-    logger.info("%s", "-" * 130)
+    print("-" * 130)
 
 
 def print_positions(positions):

@@ -12,7 +12,7 @@ def handle_trade(api: WebullApiAdapter, side: str, args):
     try:
         client = api.get_trade_client()
         account_id = api.get_first_account_id(client)
-        logger.info("准备下单 - 账户 ID: %s", account_id)
+        print(f"准备下单 - 账户 ID: {account_id}")
 
         order_type = args.order_type.upper()
         if order_type == "LIMIT" and not args.price:
@@ -45,8 +45,8 @@ def handle_trade(api: WebullApiAdapter, side: str, args):
         res = client.order_v2.place_order(account_id=account_id, new_orders=[new_order])
 
         if res.status_code == 200:
-            logger.info(">>> 下单成功!")
-            logger.info("%s", json.dumps(res.json(), indent=4))
+            print(">>> 下单成功!")
+            print(json.dumps(res.json(), indent=4))
         else:
             logger.error(">>> 下单失败: %s", res.status_code)
             logger.error("%s", res.text)
