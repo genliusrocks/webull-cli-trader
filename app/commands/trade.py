@@ -56,3 +56,33 @@ def handle_trade(api: WebullApiAdapter, side: str, args):
     except Exception as exc:
         logger.exception("交易出错: %s", exc)
         sys.exit(1)
+
+
+def handle_cancel(api: WebullApiAdapter, order_id: str):
+    """
+    处理撤单逻辑
+    """
+    try:
+        client = api.get_trade_client()
+        account_id = api.get_first_account_id(client)
+        print(f"准备撤单 - 账户 ID: {account_id}, 订单 ID: {order_id}")
+
+        # 调用 SDK 的撤单接口 (Order V2)
+        if hasattr(client, "order_v2") and hasattr(client.order_v2, "cancel_order"):
+            res = client.order_v2.cancel_order(account_id, order_id)
+
+            if res.status_code == 200:
+                print(f">>> 订单 {order_id} 撤销成功!")
+            else:
+                # 有时候撤单失败可能是因为订单已经成交或已取消，打印详细信息
+                logger.error(">>> 撤单失败: %s", res.status_code)
+                logger.error("%s", res.text)
+        else:
+            logger.error("错误: SDK 不支持 order_v2.cancel_order")
+
+    except WebullApiError as exc:
+        logger.error("%s", exc)
+        sys.exit(exc.exit_code)
+    except Exception as exc:
+        logger.exception("撤单出错: %s", exc)
+        sys.exit(1)
