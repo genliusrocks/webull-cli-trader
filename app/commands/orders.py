@@ -21,7 +21,7 @@ def handle_orders(api: WebullApiAdapter, status: str, date_str: str | None):
         if status != "open":
             query_date = date_str or datetime.now(timezone.utc).strftime("%y%m%d")
             date_note = f", 日期: {query_date} (UTC)"
-        logger.info("正在查询账户 %s 的订单 (模式: %s%s)...", account_id, status, date_note)
+        print(f"正在查询账户 {account_id} 的订单 (模式: {status}{date_note})...")
 
         if hasattr(client, "order_v2"):
             try:
