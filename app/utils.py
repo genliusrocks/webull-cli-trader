@@ -193,7 +193,7 @@ def print_positions(positions):
         return
     header = (
         f"{'Symbol':<10} {'Qty':<10} {'Last Price':<12} {'Mkt Value':<12} "
-        f"{'Cost':<10} {'Unrealized P&L':<15}"
+        f"{'Cost':<10} {'Diluted Cost':<14} {'Unrealized P&L':<15}"
     )
     print(header)
     print("-" * len(header))
@@ -201,8 +201,17 @@ def print_positions(positions):
         ticker = pos.get("ticker", {})
         symbol = ticker.get("symbol") or pos.get("symbol") or "Unknown"
         qty = pos.get("position") or pos.get("quantity") or "0"
-        last = pos.get("last_price") or pos.get("lastPrice") or "0.00"
-        mkt_val = pos.get("market_value") or pos.get("marketValue") or "0.00"
-        cost = pos.get("cost") or pos.get("costPrice") or "0.00"
-        pnl = pos.get("unrealized_profit_loss") or pos.get("unrealizedProfitLoss") or "0.00"
-        print(f"{symbol:<10} {qty:<10} {last:<12} {mkt_val:<12} {cost:<10} {pnl:<15}")
+        last = pos.get("last_price") or pos.get("lastPrice")
+        mkt_val = pos.get("market_value") or pos.get("marketValue")
+        cost = pos.get("cost") or pos.get("costPrice")
+        diluted_cost = (
+            pos.get("diluted_cost")
+            or pos.get("dilutedCost")
+            or pos.get("diluted_cost_price")
+            or pos.get("dilutedCostPrice")
+        )
+        pnl = pos.get("unrealized_profit_loss") or pos.get("unrealizedProfitLoss")
+        print(
+            f"{symbol:<10} {qty:<10} {format_price(last):<12} {format_price(mkt_val):<12} "
+            f"{format_price(cost):<10} {format_price(diluted_cost):<14} {format_price(pnl):<15}"
+        )
