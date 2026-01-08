@@ -41,6 +41,7 @@ def main():
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    logging.getLogger("webull").setLevel(logging.WARNING)
     api = WebullApiAdapter(load_config())
     parser = argparse.ArgumentParser(description="Webull OpenAPI CLI Trader")
     subparsers = parser.add_subparsers(dest="command", required=True)
