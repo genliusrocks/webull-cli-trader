@@ -128,11 +128,11 @@ def print_orders(orders_list):
 
     header = (
         f"{'Symbol':<8} {'Side':<5} {'Type':<8} {'Price':<10} {'Fill':<10} "
-        f"{'Qty':<8} {'Status':<12} {'Time (UTC)':<10} {'Fill Time (UTC)':<10} {'Order ID'}"
+        f"{'Qty':<8} {'Status':<12} {'Time (UTC)':<10} {'Fill Time (UTC)':<10} {'Client Order ID'}"
     )
-    print("-" * 130)
+    print("-" * 140)
     print(header)
-    print("-" * 130)
+    print("-" * 140)
 
     for order in orders_list:
         if not isinstance(order, dict):
@@ -181,13 +181,13 @@ def print_orders(orders_list):
         time_str = detail.get("place_time_at") or detail.get("place_time") or detail.get("create_time") or ""
         time_str = format_time_only(time_str)
         fill_time_str = format_fill_time(detail)
-        order_id = detail.get("order_id") or order.get("client_order_id")
+        order_id = detail.get("client_order_id") or order.get("client_order_id") or detail.get("order_id")
 
         print(
             f"{symbol:<8} {side:<5} {order_type:<8} {price_display:<10} {fill_display:<10} "
             f"{qty_str:<8} {status:<12} {time_str:<10} {fill_time_str:<10} {order_id}"
         )
-    print("-" * 130)
+    print("-" * 140)
 
 
 def print_positions(positions):
