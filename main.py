@@ -36,12 +36,36 @@ def handle_orders_command(api: WebullApiAdapter, args: argparse.Namespace) -> No
     handle_orders(api, args.status, args.date)
 
 
-def main():
+class _ExcludeWebullFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not record.name.startswith("webull")
+
+
+def _configure_logging() -> None:
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.WARNING,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    logging.getLogger("webull").setLevel(logging.WARNING)
+    logging.getLogger("app").setLevel(logging.INFO)
+
+    webull_logger = logging.getLogger("webull")
+    webull_logger.setLevel(logging.ERROR)
+    webull_logger.handlers.clear()
+    webull_logger.propagate = False
+    webull_logger.addHandler(logging.NullHandler())
+
+    for name, logger in logging.root.manager.loggerDict.items():
+        if isinstance(logger, logging.Logger) and name.startswith("webull"):
+            logger.setLevel(logging.ERROR)
+            logger.handlers.clear()
+            logger.propagate = False
+
+    for handler in logging.getLogger().handlers:
+        handler.addFilter(_ExcludeWebullFilter())
+
+
+def main():
+    _configure_logging()
     api = WebullApiAdapter(load_config())
     parser = argparse.ArgumentParser(description="Webull OpenAPI CLI Trader")
     subparsers = parser.add_subparsers(dest="command", required=True)
