@@ -1,22 +1,25 @@
 import json
+import logging
 import sys
 import uuid
 
-from app.adapter import WebullApiAdapter
+from app.adapter import WebullApiAdapter, WebullApiError
+
+logger = logging.getLogger(__name__)
 
 
 def handle_trade(api: WebullApiAdapter, side: str, args):
     try:
         client = api.get_trade_client()
         account_id = api.get_first_account_id(client)
-        print(f"准备下单 - 账户 ID: {account_id}")
+        logger.info("准备下单 - 账户 ID: %s", account_id)
 
         order_type = args.order_type.upper()
         if order_type == "LIMIT" and not args.price:
-            print("错误: LIMIT 单必须提供价格")
+            logger.error("错误: LIMIT 单必须提供价格")
             return
         if order_type == "STOP" and not args.aux:
-            print("错误: STOP 单必须提供触发价 (使用 --aux 参数)")
+            logger.error("错误: STOP 单必须提供触发价 (使用 --aux 参数)")
             return
 
         new_order = {
@@ -42,10 +45,14 @@ def handle_trade(api: WebullApiAdapter, side: str, args):
         res = client.order_v2.place_order(account_id=account_id, new_orders=[new_order])
 
         if res.status_code == 200:
-            print(">>> 下单成功!")
-            print(json.dumps(res.json(), indent=4))
+            logger.info(">>> 下单成功!")
+            logger.info("%s", json.dumps(res.json(), indent=4))
         else:
-            print(f">>> 下单失败: {res.status_code}")
-            print(res.text)
-    except Exception as e:
-        print(f"交易出错: {e}", file=sys.stderr)
+            logger.error(">>> 下单失败: %s", res.status_code)
+            logger.error("%s", res.text)
+    except WebullApiError as exc:
+        logger.error("%s", exc)
+        sys.exit(exc.exit_code)
+    except Exception as exc:
+        logger.exception("交易出错: %s", exc)
+        sys.exit(1)

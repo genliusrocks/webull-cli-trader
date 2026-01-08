@@ -1,5 +1,6 @@
 import argparse
 import functools
+import logging
 
 from app.adapter import WebullApiAdapter
 from app.commands.account import (
@@ -36,6 +37,10 @@ def handle_orders_command(api: WebullApiAdapter, args: argparse.Namespace) -> No
 
 
 def main():
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     api = WebullApiAdapter(load_config())
     parser = argparse.ArgumentParser(description="Webull OpenAPI CLI Trader")
     subparsers = parser.add_subparsers(dest="command", required=True)
