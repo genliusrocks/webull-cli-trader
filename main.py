@@ -1,95 +1,98 @@
 import argparse
-import functools
-import logging
+import sys
+import os
+from dataclasses import dataclass
 
-from app.adapter import WebullApiAdapter
-from app.commands.account import (
-    handle_account_balance,
-    handle_account_list,
-    handle_account_positions,
-)
-from app.commands.orders import handle_orders
-from app.commands.trade import handle_trade
+# 复用你现有的模块
 from app.config import load_config
-
-
-def add_trade_subparser(subparsers: argparse._SubParsersAction, name: str) -> argparse.ArgumentParser:
-    parser = subparsers.add_parser(name, help=name.capitalize())
-    parser.add_argument("symbol")
-    parser.add_argument("order_type", choices=["limit", "market", "stop"])
-    parser.add_argument("quantity", type=int)
-    parser.add_argument("price", nargs="?", type=float)
-    parser.add_argument("--aux", type=float)
-    return parser
-
-
-def handle_account(api: WebullApiAdapter, args: argparse.Namespace) -> None:
-    if args.action == "list":
-        handle_account_list(api)
-    elif args.action == "balance":
-        handle_account_balance(api)
-    elif args.action == "positions":
-        handle_account_positions(api)
-
-
-def handle_orders_command(api: WebullApiAdapter, args: argparse.Namespace) -> None:
-    handle_orders(api, args.status, args.date)
-
-
-class _ExcludeWebullFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        return not record.name.startswith("webull")
-
-
-def _configure_logging() -> None:
-    logging.basicConfig(
-        level=logging.WARNING,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-    logging.getLogger("app").setLevel(logging.INFO)
-
-    webull_logger = logging.getLogger("webull")
-    webull_logger.setLevel(logging.ERROR)
-    webull_logger.handlers.clear()
-    webull_logger.propagate = False
-    webull_logger.addHandler(logging.NullHandler())
-
-    for name, logger in logging.root.manager.loggerDict.items():
-        if isinstance(logger, logging.Logger) and name.startswith("webull"):
-            logger.setLevel(logging.ERROR)
-            logger.handlers.clear()
-            logger.propagate = False
-
-    for handler in logging.getLogger().handlers:
-        handler.addFilter(_ExcludeWebullFilter())
-
+from app.adapter import WebullApiAdapter
+from app.commands import account, orders, trade
 
 def main():
-    _configure_logging()
-    api = WebullApiAdapter(load_config())
+    # 加载配置
+    try:
+        config = load_config()
+        api = WebullApiAdapter(config)
+    except Exception as e:
+        print(f"初始化失败: {e}", file=sys.stderr)
+        sys.exit(1)
+
     parser = argparse.ArgumentParser(description="Webull OpenAPI CLI Trader")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest='command', required=True)
+    
+    # --- Account 命令 ---
+    account_parser = subparsers.add_parser('account', help='Account management')
+    account_parser.add_argument('action', choices=['list', 'balance', 'positions'], help='Action')
+    
+    # --- Token 命令 ---
+    token_parser = subparsers.add_parser('token', help='Manage Token')
+    token_parser.add_argument('--export', action='store_true', help='Print export command')
 
-    account_parser = subparsers.add_parser("account", help="Account")
-    account_parser.add_argument("action", choices=["list", "balance", "positions"])
-    account_parser.set_defaults(handler=functools.partial(handle_account, api))
+    # --- Orders 命令 ---
+    orders_parser = subparsers.add_parser('orders', help='List orders')
+    orders_parser.add_argument('status', nargs='?', choices=['open', 'executed', 'all'], default='open')
+    orders_parser.add_argument('--date', help='Orders date (yymmdd)')
 
-    orders_parser = subparsers.add_parser("orders", help="Orders")
-    orders_parser.add_argument("status", nargs="?", choices=["open", "executed", "all"], default="open")
-    orders_parser.add_argument(
-        "--date", help="Orders date in yymmdd (UTC). Default: today when status is executed/all."
-    )
-    orders_parser.set_defaults(handler=functools.partial(handle_orders_command, api))
+    # --- Buy 命令 ---
+    buy_parser = subparsers.add_parser('buy', help='Place a BUY order')
+    buy_parser.add_argument('symbol', help='Symbol (e.g. AAPL)')
+    buy_parser.add_argument('order_type', choices=['limit', 'market', 'stop'], help='Order Type')
+    buy_parser.add_argument('quantity', type=int, help='Quantity')
+    buy_parser.add_argument('price', nargs='?', type=float, help='Price (for Limit)')
+    buy_parser.add_argument('--aux', type=float, help='Aux Price (for Stop)')
 
-    buy_parser = add_trade_subparser(subparsers, "buy")
-    buy_parser.set_defaults(handler=functools.partial(handle_trade, api, "BUY"))
+    # --- Sell 命令 (平多仓) ---
+    sell_parser = subparsers.add_parser('sell', help='Place a SELL order (Close Position)')
+    sell_parser.add_argument('symbol', help='Symbol')
+    sell_parser.add_argument('order_type', choices=['limit', 'market', 'stop'], help='Order Type')
+    sell_parser.add_argument('quantity', type=int, help='Quantity')
+    sell_parser.add_argument('price', nargs='?', type=float, help='Price')
+    sell_parser.add_argument('--aux', type=float, help='Aux Price')
 
-    sell_parser = add_trade_subparser(subparsers, "sell")
-    sell_parser.set_defaults(handler=functools.partial(handle_trade, api, "SELL"))
+    # --- [新增] Short 命令 (开空仓) ---
+    short_parser = subparsers.add_parser('short', help='Place a SHORT SELL order')
+    short_parser.add_argument('symbol', help='Symbol')
+    short_parser.add_argument('order_type', choices=['limit', 'market', 'stop'], help='Order Type')
+    short_parser.add_argument('quantity', type=int, help='Quantity')
+    short_parser.add_argument('price', nargs='?', type=float, help='Price')
+    short_parser.add_argument('--aux', type=float, help='Aux Price')
 
     args = parser.parse_args()
-    args.handler(args)
 
+    # --- 命令分发 ---
+    if args.command == 'account':
+        if args.action == 'list':
+            account.handle_account_list(api)
+        elif args.action == 'balance':
+            account.handle_account_balance(api)
+        elif args.action == 'positions':
+            account.handle_account_positions(api)
+            
+    elif args.command == 'token':
+        from app.commands import token # 假设你有这个模块，或者直接在这里处理
+        if args.export:
+            # 简单的 token 导出逻辑
+            token_path = "conf/token.txt"
+            if os.path.exists(token_path):
+                with open(token_path) as f:
+                    print(f"export WEBULL_ACCESS_TOKEN='{f.read().strip()}'")
+            else:
+                print("Token file not found.", file=sys.stderr)
+
+    elif args.command == 'orders':
+        orders.handle_orders(api, args.status, args.date)
+    
+    elif args.command == 'buy':
+        trade.handle_trade(api, 'BUY', args)
+        
+    elif args.command == 'sell':
+        # Sell 仅用于平多仓
+        trade.handle_trade(api, 'SELL', args)
+        
+    elif args.command == 'short':
+        # 新增: Short 专门用于做空，传递 'SELL_SHORT' 给 API
+        # 注意: 确保你的账户类型是 Margin 账户，且有足够的保证金
+        trade.handle_trade(api, 'SHORT', args)
 
 if __name__ == "__main__":
     main()
