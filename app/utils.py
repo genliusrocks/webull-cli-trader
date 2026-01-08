@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def format_time(time_str) -> str:
@@ -116,20 +119,20 @@ def format_fill_time(detail: dict) -> str:
 
 def print_orders(orders_list):
     if not orders_list:
-        print(">>> 当前没有订单。")
+        logger.info(">>> 当前没有订单。")
         return
 
     if not isinstance(orders_list, list):
-        print(f"数据格式错误: {orders_list}")
+        logger.error("数据格式错误: %s", orders_list)
         return
 
     header = (
         f"{'Symbol':<8} {'Side':<5} {'Type':<8} {'Price':<10} {'Fill':<10} "
         f"{'Qty':<8} {'Status':<12} {'Time (UTC)':<10} {'Fill Time (UTC)':<10} {'Order ID'}"
     )
-    print("-" * 130)
-    print(header)
-    print("-" * 130)
+    logger.info("%s", "-" * 130)
+    logger.info("%s", header)
+    logger.info("%s", "-" * 130)
 
     for order in orders_list:
         if not isinstance(order, dict):
@@ -180,23 +183,24 @@ def print_orders(orders_list):
         fill_time_str = format_fill_time(detail)
         order_id = detail.get("order_id") or order.get("client_order_id")
 
-        print(
+        logger.info(
+            "%s",
             f"{symbol:<8} {side:<5} {order_type:<8} {price_display:<10} {fill_display:<10} "
-            f"{qty_str:<8} {status:<12} {time_str:<10} {fill_time_str:<10} {order_id}"
+            f"{qty_str:<8} {status:<12} {time_str:<10} {fill_time_str:<10} {order_id}",
         )
-    print("-" * 130)
+    logger.info("%s", "-" * 130)
 
 
 def print_positions(positions):
     if not positions:
-        print("当前无持仓。")
+        logger.info("当前无持仓。")
         return
     header = (
         f"{'Symbol':<10} {'Qty':<10} {'Last Price':<12} {'Mkt Value':<12} "
         f"{'Cost':<10} {'Diluted Cost':<14} {'Unrealized P&L':<15}"
     )
-    print(header)
-    print("-" * len(header))
+    logger.info("%s", header)
+    logger.info("%s", "-" * len(header))
     for pos in positions:
         ticker = pos.get("ticker", {})
         symbol = ticker.get("symbol") or pos.get("symbol") or "Unknown"
@@ -211,7 +215,8 @@ def print_positions(positions):
             or pos.get("dilutedCostPrice")
         )
         pnl = pos.get("unrealized_profit_loss") or pos.get("unrealizedProfitLoss")
-        print(
+        logger.info(
+            "%s",
             f"{symbol:<10} {qty:<10} {format_price(last):<12} {format_price(mkt_val):<12} "
-            f"{format_price(cost):<10} {format_price(diluted_cost):<14} {format_price(pnl):<15}"
+            f"{format_price(cost):<10} {format_price(diluted_cost):<14} {format_price(pnl):<15}",
         )
