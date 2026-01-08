@@ -193,14 +193,14 @@ def print_orders(orders_list):
 
 def print_positions(positions):
     if not positions:
-        logger.info("当前无持仓。")
+        print("当前无持仓。")
         return
     header = (
         f"{'Symbol':<10} {'Qty':<10} {'Last Price':<12} {'Mkt Value':<12} "
         f"{'Cost':<10} {'Diluted Cost':<14} {'Unrealized P&L':<15}"
     )
-    logger.info("%s", header)
-    logger.info("%s", "-" * len(header))
+    print(header)
+    print("-" * len(header))
     for pos in positions:
         ticker = pos.get("ticker", {})
         symbol = ticker.get("symbol") or pos.get("symbol") or "Unknown"
@@ -215,8 +215,7 @@ def print_positions(positions):
             or pos.get("dilutedCostPrice")
         )
         pnl = pos.get("unrealized_profit_loss") or pos.get("unrealizedProfitLoss")
-        logger.info(
-            "%s",
+        print(
             f"{symbol:<10} {qty:<10} {format_price(last):<12} {format_price(mkt_val):<12} "
             f"{format_price(cost):<10} {format_price(diluted_cost):<14} {format_price(pnl):<15}",
         )
