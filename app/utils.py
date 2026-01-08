@@ -206,14 +206,28 @@ def print_positions(positions):
         qty = pos.get("position") or pos.get("quantity") or "0"
         last = pos.get("last_price") or pos.get("lastPrice")
         mkt_val = pos.get("market_value") or pos.get("marketValue")
+
         cost = pos.get("cost") or pos.get("costPrice")
+
         diluted_cost = (
             pos.get("diluted_cost")
             or pos.get("dilutedCost")
             or pos.get("diluted_cost_price")
             or pos.get("dilutedCostPrice")
+            or pos.get("costPrice")
+            or pos.get("cost_price")
         )
+
+        if (diluted_cost is None or diluted_cost == "") and cost and qty:
+            try:
+                qty_val = float(qty)
+                if qty_val != 0:
+                    diluted_cost = float(cost) / qty_val
+            except (ValueError, TypeError):
+                pass
+
         pnl = pos.get("unrealized_profit_loss") or pos.get("unrealizedProfitLoss")
+
         print(
             f"{symbol:<10} {qty:<10} {format_price(last):<12} {format_price(mkt_val):<12} "
             f"{format_price(cost):<10} {format_price(diluted_cost):<14} {format_price(pnl):<15}",
