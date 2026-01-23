@@ -29,12 +29,12 @@ def handle_orders(api: WebullApiAdapter, status: str, date_str: str | None):
 
                 if status == "open":
                     if hasattr(client.order_v2, "get_order_open"):
-                        res = client.order_v2.get_order_open(account_id)
+                        res = client.order_v2.get_order_open(account_id, page_size=100)
                     else:
                         logger.error("错误: 找不到 get_order_open 方法")
                 else:
                     if hasattr(client.order_v2, "get_order_history_request"):
-                        res = client.order_v2.get_order_history_request(account_id)
+                        res = client.order_v2.get_order_history_request(account_id, page_size=100)
                     else:
                         logger.error("错误: 找不到 get_order_history_request 方法")
 
