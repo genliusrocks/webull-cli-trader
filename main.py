@@ -33,6 +33,11 @@ def main():
     orders_parser.add_argument('status', nargs='?', choices=['open', 'executed', 'all'], default='open')
     orders_parser.add_argument('--date', help='Orders date (yymmdd)')
 
+    # --- Review 命令 (新增) ---
+    review_parser = subparsers.add_parser('review', help='Review trades on a chart')
+    review_parser.add_argument('symbol', help='Stock Symbol (e.g. TSLA)')
+    review_parser.add_argument('--date', required=True, help='Date to review (yymmdd), e.g. 260122')
+
     # --- Buy 命令 ---
     buy_parser = subparsers.add_parser('buy', help='Place a BUY order')
     buy_parser.add_argument('symbol', help='Symbol (e.g. AAPL)')
@@ -49,7 +54,7 @@ def main():
     sell_parser.add_argument('price', nargs='?', type=float, help='Price')
     sell_parser.add_argument('--aux', type=float, help='Aux Price')
 
-    # --- [新增] Short 命令 (开空仓) ---
+    # --- Short 命令 (开空仓) ---
     short_parser = subparsers.add_parser('short', help='Place a SHORT SELL order')
     short_parser.add_argument('symbol', help='Symbol')
     short_parser.add_argument('order_type', choices=['limit', 'market', 'stop'], help='Order Type')
@@ -57,7 +62,7 @@ def main():
     short_parser.add_argument('price', nargs='?', type=float, help='Price')
     short_parser.add_argument('--aux', type=float, help='Aux Price')
 
-    # --- [新增] Cancel 命令 ---
+    # --- Cancel 命令 ---
     cancel_parser = subparsers.add_parser('cancel', help='Cancel an order')
     cancel_parser.add_argument('order_id', help='Order ID to cancel')
 
@@ -73,9 +78,8 @@ def main():
             account.handle_account_positions(api)
             
     elif args.command == 'token':
-        from app.commands import token # 假设你有这个模块，或者直接在这里处理
+        from app.commands import token 
         if args.export:
-            # 简单的 token 导出逻辑
             token_path = "conf/token.txt"
             if os.path.exists(token_path):
                 with open(token_path) as f:
@@ -85,21 +89,22 @@ def main():
 
     elif args.command == 'orders':
         orders.handle_orders(api, args.status, args.date)
+        
+    elif args.command == 'review':
+        # 动态导入 review 模块
+        from app.commands import review
+        review.handle_review(api, args.symbol, args.date)
     
     elif args.command == 'buy':
         trade.handle_trade(api, 'BUY', args)
         
     elif args.command == 'sell':
-        # Sell 仅用于平多仓
         trade.handle_trade(api, 'SELL', args)
         
     elif args.command == 'short':
-        # 新增: Short 专门用于做空，传递 'SELL_SHORT' 给 API
-        # 注意: 确保你的账户类型是 Margin 账户，且有足够的保证金
         trade.handle_trade(api, 'SHORT', args)
         
     elif args.command == 'cancel':
-        # 调用刚刚在 trade.py 中添加的函数
         trade.handle_cancel(api, args.order_id)
 
 if __name__ == "__main__":
