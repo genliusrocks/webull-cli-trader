@@ -1,4 +1,5 @@
 import argparse
+import logging
 import sys
 import os
 from dataclasses import dataclass
@@ -8,16 +9,23 @@ from app.config import load_config
 from app.adapter import WebullApiAdapter
 from app.commands import account, orders, trade
 
-def main():
-    # 加载配置
-    try:
-        config = load_config()
-        api = WebullApiAdapter(config)
-    except Exception as e:
-        print(f"初始化失败: {e}", file=sys.stderr)
-        sys.exit(1)
 
+def parse_log_level(value: str) -> str:
+    level_name = value.upper()
+    if level_name not in logging._nameToLevel:
+        raise argparse.ArgumentTypeError(
+            f"Invalid log level '{value}'. Use one of: {', '.join(logging._nameToLevel.keys())}"
+        )
+    return level_name
+
+def main():
     parser = argparse.ArgumentParser(description="Webull OpenAPI CLI Trader")
+    parser.add_argument(
+        "--log-level",
+        default=os.getenv("WEBULL_LOG_LEVEL", "WARNING"),
+        type=parse_log_level,
+        help="Logging level (e.g. DEBUG, INFO, WARNING, ERROR). Can also set WEBULL_LOG_LEVEL.",
+    )
     subparsers = parser.add_subparsers(dest='command', required=True)
     
     # --- Account 命令 ---
@@ -67,6 +75,16 @@ def main():
     cancel_parser.add_argument('order_id', help='Order ID to cancel')
 
     args = parser.parse_args()
+
+    logging.basicConfig(level=logging._nameToLevel[args.log_level])
+
+    # 加载配置
+    try:
+        config = load_config()
+        api = WebullApiAdapter(config)
+    except Exception as e:
+        print(f"初始化失败: {e}", file=sys.stderr)
+        sys.exit(1)
 
     # --- 命令分发 ---
     if args.command == 'account':
